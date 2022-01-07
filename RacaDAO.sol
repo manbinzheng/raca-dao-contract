@@ -9,6 +9,7 @@ import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "./libraries/SafeMath.sol";
 
+
 contract RaCaDAO is ERC20 {
     using SafeMath for uint256;
     modifier lockSwap {
@@ -23,7 +24,7 @@ contract RaCaDAO is ERC20 {
     uint256 public constant AMOUNT_LP = MAX_SUPPLY / 100 * 20;
     uint256 public constant AMOUNT_INVITE = MAX_SUPPLY / 100 * 15;
 
-    uint256 public constant INVITE_REWARD = 100 ether;
+    uint256 public constant INVITE_REWARD = 3000 ether;
     uint256 public constant INVITE_NUMBER = 10;
 
     uint256 internal _buyTax = 5;
@@ -56,7 +57,7 @@ contract RaCaDAO is ERC20 {
         address payable treasuryWallet,
         address lpAddr,
         address signer
-    ) ERC20("RaCaDAO", "RDAO")  {
+    ) ERC20("RaCaDAOA", "RDAOA")  {
         _addTaxExcluded(msg.sender);
         _addTaxExcluded(address(this));
 
@@ -182,7 +183,9 @@ contract RaCaDAO is ERC20 {
     }
 
     function receiveReward() public {
-        require(_inviteReward[msg.sender]>0, "RacaDAO: No reward");
+       require(_inviteReward[msg.sender]>0, "RacaDAO: No reward");
+       require(_inviteAmount<AMOUNT_INVITE, "RacaDAO: Exceed max supply");
+       require(totalSupply() + _inviteReward[msg.sender] <= MAX_SUPPLY, "RacaDAO: Exceed max supply");
         uint256 reward = _inviteReward[msg.sender];
         _inviteReward[msg.sender] = 0;
         _mint(msg.sender, reward);
@@ -196,12 +199,8 @@ contract RaCaDAO is ERC20 {
         return(_minted[addr]);
     }
 
-    function pausedReward() public view returns (bool) {
-        bool  paused = false;
-        if(_inviteAmount >= AMOUNT_INVITE){
-                 paused = true;
-        }
-        return(paused);
+    function pausedReward() public view returns (bool) {  
+         return (_inviteAmount >= AMOUNT_INVITE) && true;
     }
 
     receive() external payable {}
