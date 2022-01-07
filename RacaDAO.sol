@@ -1,15 +1,16 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: UNLICENSED
 
 
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "./interfaces/IPancakeFactory.sol";
-import "./interfaces/IPancakePair.sol";
-import "./interfaces/IPancakeRouter02.sol";
-import "openzeppelin-solidity/contracts/utils/math/SafeMath.sol";
+import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
+import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
+import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+import "./libraries/SafeMath.sol";
 
-contract RacaDAO is ERC20 {
+
+contract RaCaDAO is ERC20 {
     using SafeMath for uint256;
     modifier lockSwap {
         _inSwap = true;
@@ -17,24 +18,28 @@ contract RacaDAO is ERC20 {
         _inSwap = false;
     }
 
-    uint256 public constant MAX_SUPPLY = uint248(1e14 ether);
+    uint256 public constant MAX_SUPPLY = 1000000000 ether;
 
     uint256 public constant AMOUNT_DAO = MAX_SUPPLY / 100 * 30;
     uint256 public constant AMOUNT_LP = MAX_SUPPLY / 100 * 20;
+    uint256 public constant AMOUNT_INVITE = MAX_SUPPLY / 100 * 15;
 
-    uint256 public constant INVITE_REWARD = 100;
+    uint256 public constant INVITE_REWARD = 3000 ether;
+    uint256 public constant INVITE_NUMBER = 10;
 
     uint256 internal _buyTax = 5;
     uint256 internal _sellTax = 10;
     uint256 internal _maxSwap = 5;
     uint256 internal _swapFeesAt = 1000 ether;
+    uint256 internal _inviteAmount = 0 ether;
     bool internal _swapFees = true;
 
     address payable internal _marketingWallet;
     address payable internal _treasuryWallet;
     address internal _signer;
 
-    IPancakeRouter02 internal _router = IPancakeRouter02(address(0));
+    IUniswapV2Router02 internal _router = IUniswapV2Router02(address(0));
+
     address internal _pair;
     bool internal _inSwap = false;
     bool internal _inLiquidityAdd = false;
@@ -43,15 +48,16 @@ contract RacaDAO is ERC20 {
     mapping(address => bool) public _taxExcluded;
     mapping(address => uint256) public _inviteReward;
     mapping(address => uint256) public _inviteRewardTotal;
+    mapping(address => uint256) public _inviteCount;
 
     constructor(
-        address pancakeswapFactory,
-        address pancakeswapRouter,
+        address uniswapFactory,
+        address uniswapRouter,
         address payable marketingWallet,
         address payable treasuryWallet,
         address lpAddr,
         address signer
-    ) ERC20("RacaDAO", "RDAO")  {
+    ) ERC20("RaCaDAOA", "RDAOA")  {
         _addTaxExcluded(msg.sender);
         _addTaxExcluded(address(this));
 
@@ -62,9 +68,9 @@ contract RacaDAO is ERC20 {
         _treasuryWallet = treasuryWallet;
         _signer = signer;
 
-        _router = IPancakeRouter02(pancakeswapRouter);
-        IPancakeFactory pancakeswapContract = IPancakeFactory(pancakeswapFactory);
-        _pair = pancakeswapContract.createPair(address(this), _router.WETH());
+        _router = IUniswapV2Router02(uniswapRouter);
+        IUniswapV2Factory uniswapContract = IUniswapV2Factory(uniswapFactory);
+        _pair = uniswapContract.createPair(address(this), _router.WETH());
     }
 
     function isTaxExcluded(address account) public view returns (bool) {
@@ -160,24 +166,41 @@ contract RacaDAO is ERC20 {
 
         require(signer == _signer, "RacaDAO: Invalid signer");
 
-        _inviteReward[inviter] = _inviteReward[inviter].add(INVITE_REWARD);
+        if (inviter != address(0) && _inviteCount[inviter] <  INVITE_NUMBER && _inviteAmount < AMOUNT_INVITE){
 
-        _inviteRewardTotal[inviter] = _inviteRewardTotal[inviter].add(INVITE_REWARD);
+            _inviteReward[inviter] = _inviteReward[inviter].add(INVITE_REWARD);
 
+            _inviteRewardTotal[inviter] = _inviteRewardTotal[inviter].add(INVITE_REWARD);
+            
+            _inviteCount[inviter]  = _inviteCount[inviter].add(1);
+
+            _inviteAmount = _inviteAmount.add(INVITE_REWARD);
+
+        }
         _minted[msg.sender] = true;
-		
+        
         _mint(msg.sender, amount);
     }
 
-    function receiveReward(){
-        require(_inviteReward[msg.sender]>0, "RacaDAO: No reward");
+    function receiveReward() public {
+       require(_inviteReward[msg.sender]>0, "RacaDAO: No reward");
+       require(_inviteAmount<AMOUNT_INVITE, "RacaDAO: Exceed max supply");
+       require(totalSupply() + _inviteReward[msg.sender] <= MAX_SUPPLY, "RacaDAO: Exceed max supply");
         uint256 reward = _inviteReward[msg.sender];
-        _inviteReward[msg.sender] = 0
+        _inviteReward[msg.sender] = 0;
         _mint(msg.sender, reward);
     }
 
-    function invitation(address addr) public view returns (bool) {
+    function readReward(address account) public view returns (uint256,uint256,uint256) {
+        return (_inviteReward[account],_inviteRewardTotal[account],_inviteCount[account]);
+    }
+
+    function minted(address addr) public view returns (bool) {
         return(_minted[addr]);
+    }
+
+    function pausedReward() public view returns (bool) {  
+         return (_inviteAmount >= AMOUNT_INVITE) && true;
     }
 
     receive() external payable {}
